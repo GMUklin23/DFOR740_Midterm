@@ -1,5 +1,6 @@
 Compilation:
-Because these files are written in C++, g++ can be used to compile the source code into binaries via g++ {filename}.cpp -o {outputfilename}
+Because these files are written in C++ but uses the win32api it's recommended to use a build tool like Visual Studio Build Tools to compile these binaries.
+If on Linux, g++ can be used to compile the source code into binaries via g++ {filename}.cpp -o {outputfilename}, but you will likely run into issues because of the win32api.
 
 tasklist.cpp is based on the Windows tasklist utility which will list the processes on the system. 
 The only supported flags are [NONE], [/V], and [/SVC] per assignment instructions.
