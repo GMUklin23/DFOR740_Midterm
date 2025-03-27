@@ -14,9 +14,10 @@ std::string wStringToString(const std::wstring& wstr) {
 
 // Windows taskkill documentation https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/taskkill
 
+
 // Based on https://stackoverflow.com/questions/70178895/need-win32-api-c-code-that-is-equivalent-to-taskkill-t-f-pid-xxx
 // Function to terminate a process by ID
-bool TerminateProcessById(DWORD processId, bool forceful) {
+bool TerminateSingleProcessById(DWORD processId, bool forceful) {
     HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, processId);
     if (hProcess == NULL) {
         std::wcerr << L"Failed to open process with ID " << processId << L". Error: " << GetLastError() << std::endl;
@@ -30,6 +31,29 @@ bool TerminateProcessById(DWORD processId, bool forceful) {
 
     CloseHandle(hProcess);
     return result;
+}
+
+
+// Function to terminate a process by ID
+bool TerminateProcessById(DWORD parentProcessId, bool forceful, bool tree) {
+    if (tree) {
+        // Recursive termination of child processes
+        HANDLE childSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        PROCESSENTRY32W childPe32;
+        childPe32.dwSize = sizeof(PROCESSENTRY32W);
+
+        if (Process32FirstW(childSnapshot, &childPe32)) {
+            do {
+                // Kill children based on parent process id
+                if (childPe32.th32ParentProcessID == parentProcessId) {
+                    TerminateSingleProcessById(childPe32.th32ProcessID, forceful);
+                }
+            } while (Process32NextW(childSnapshot, &childPe32));
+        }
+        CloseHandle(childSnapshot);
+    }
+
+    return TerminateSingleProcessById(parentProcessId, forceful);
 }
 
 // Based on https://stackoverflow.com/questions/7956519/how-to-kill-processes-by-name-win32-api
@@ -48,24 +72,7 @@ bool TerminateProcessesByImageName(const std::string& imageName, bool forceful, 
     if (Process32FirstW(hSnapshot, &pe32)) {
         do {
             if (wStringToString(pe32.szExeFile) == imageName) {
-                if (tree) {
-                    // Recursive termination of child processes
-                    HANDLE childSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-                    PROCESSENTRY32W childPe32;
-                    childPe32.dwSize = sizeof(PROCESSENTRY32W);
-
-                    if (Process32FirstW(childSnapshot, &childPe32)) {
-                        do {
-                            // Kill children based on parent process id
-                            if (childPe32.th32ParentProcessID == pe32.th32ProcessID) {
-                                TerminateProcessById(childPe32.th32ProcessID, forceful);
-                            }
-                        } while (Process32NextW(childSnapshot, &childPe32));
-                    }
-                    CloseHandle(childSnapshot);
-                }
-
-                if (TerminateProcessById(pe32.th32ProcessID, forceful)) {
+                if (TerminateProcessById(pe32.th32ProcessID, forceful, tree)) {
                     processFound = true;
                 }
             }
@@ -106,7 +113,7 @@ int main(int argc, char* argv[]) {
 
     bool success = false;
     if (processId != 0) {
-        success = TerminateProcessById(processId, forceful);
+        success = TerminateProcessById(processId, forceful, tree);
     }
     else if (!imageName.empty()) {
         success = TerminateProcessesByImageName(imageName, forceful, tree);
